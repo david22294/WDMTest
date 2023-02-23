@@ -1,0 +1,58 @@
+;
+; MyDriver.inf
+;
+
+[Version]
+Signature="$WINDOWS NT$"
+Class=System
+ClassGuid={4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider=GRAID
+DriverVer=
+CatalogFile=MyDriver.cat
+
+;This template is supported for OS version 17763 (Windows 10 version 1809) and after.
+;For Windows OS prior to Windows 10 1809 set DefaultDestDir = 12
+[DestinationDirs]
+DefaultDestDir = 12
+MyDriver.DriverFiles = 12
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+MyDriver.sys = 1
+
+[DefaultInstall]
+CopyFiles = MyDriver.DriverFiles
+
+[DefaultInstall.Services]
+AddService = %ServiceName%,,MyDriver.Service
+
+[DefaultUninstall]
+DelFiles = MyDriver.DriverFiles
+DelReg = MyDriver.DelRegistry
+
+[DefaultUninstall.Services]
+DelService = %ServiceName%, 0x200
+
+[MyDriver.DriverFiles]
+MyDriver.sys
+
+[MyDriver.Service]
+DisplayName    = %ServiceName%
+Description    = %ServiceDesc%
+ServiceBinary  = %12%\MyDriver.sys
+ServiceType    = 1 ;    SERVICE_KERNEL_DRIVER
+StartType      = 2 ;    SERVICE_AUTO_START
+ErrorControl   = 1 ;    SERVICE_ERROR_NORMAL
+LoadOrderGroup = "FSFilter Activity Monitor"
+AddReg         = MyDriver.AddRegistry
+
+[MyDriver.AddRegistry]
+
+[MyDriver.DelRegistry]
+
+[Strings]
+DiskName="MyDriver Source Disk"
+ServiceName="MyDriver"
+ServiceDesc="Testing Service for MyDriver"
