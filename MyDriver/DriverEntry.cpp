@@ -213,11 +213,11 @@ void IoWorkitemRoutine(
     }
 
     
-    status = PsCreateSystemThread(&hThreadHandle, GENERIC_ALL, NULL, NULL, NULL, ThreadFunc2, NULL);
-    if (status == STATUS_SUCCESS) {
-        ObReferenceObjectByHandle(hThreadHandle, GENERIC_ALL, NULL, KernelMode, &pThreadHandle2, NULL);
-        ZwClose(hThreadHandle);
-    }
+    //status = PsCreateSystemThread(&hThreadHandle, GENERIC_ALL, NULL, NULL, NULL, ThreadFunc2, NULL);
+    //if (status == STATUS_SUCCESS) {
+    //    ObReferenceObjectByHandle(hThreadHandle, GENERIC_ALL, NULL, KernelMode, &pThreadHandle2, NULL);
+    //    ZwClose(hThreadHandle);
+    //}
 
     KeSetEvent(&EventStartDpc, IO_NO_INCREMENT, FALSE);
 
