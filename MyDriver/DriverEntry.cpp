@@ -9,41 +9,82 @@ PDEVICE_OBJECT g_pDeviceObject = NULL;
 PVOID pThreadHandle1;
 PVOID pThreadHandle2;
 KEVENT EventCloseThread;
+KEVENT EventStartDpc;
+KDPC DpcObj;
+LONG CpuId;
 
 #define waitTime -10 * 30000000 // 30 seconds
 
 void ThreadFunc1(PVOID StartContext) 
 {
     UNREFERENCED_PARAMETER(StartContext);
-    DbgPrint("Hello Kernel Thread 1!\n");
+    //DbgPrint("Hello Kernel Thread 1!\n");
     DbgPrint("Kernel Thread 1 starts working!\n");
-    LARGE_INTEGER wait;
-    wait.QuadPart = waitTime;
+    LARGE_INTEGER wait = { 0 };
+    //wait.QuadPart = waitTime;
+    KeWaitForSingleObject(&EventStartDpc, Executive, KernelMode, FALSE, NULL);
+
+    for (int i = 0; i < 5; i++)
+    {
+        LONG id = InterlockedIncrement(&CpuId);
+        KeSetTargetProcessorDpc(&DpcObj, (CCHAR)id);
+        BOOLEAN bDpc0 = KeInsertQueueDpc(&DpcObj, NULL, NULL);
+        if (bDpc0 == FALSE)
+            DbgPrint("Dpc%d Insert Failed!\n", id);
+    }
+    
     while (true) {
         if (KeWaitForSingleObject(&EventCloseThread, Executive, KernelMode, FALSE, &wait) == STATUS_SUCCESS)
             break;
-        DbgPrint("Kernel Thread 1 is working!\n");
     }
     // DbgBreakPoint();
-    DbgPrint("Bye Kerenl Thread 1!\n");
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
 
 void ThreadFunc2(PVOID StartContext)
 {
     UNREFERENCED_PARAMETER(StartContext);
-    DbgPrint("Hello Kernel Thread 2!\n");
+    //DbgPrint("Hello Kernel Thread 2!\n");
     DbgPrint("Kernel Thread 2 starts working!\n");
-    LARGE_INTEGER wait;
-    wait.QuadPart = waitTime;
+    LARGE_INTEGER wait = { 0 };
+    //wait.QuadPart = waitTime;
+    KeWaitForSingleObject(&EventStartDpc, Executive, KernelMode, FALSE, NULL);
+    for (int i = 0; i < 5; i++)
+    {
+        LONG id = InterlockedIncrement(&CpuId);
+        KeSetTargetProcessorDpc(&DpcObj, (CCHAR)id);
+        BOOLEAN bDpc0 = KeInsertQueueDpc(&DpcObj, NULL, NULL);
+        if (bDpc0 == FALSE)
+            DbgPrint("Dpc%d Insert Failed!\n", id);
+    }
+
     while (true) {
         if (KeWaitForSingleObject(&EventCloseThread, Executive, KernelMode, FALSE, &wait) == STATUS_SUCCESS)
             break;
-        DbgPrint("Kernel Thread 2 is working!\n");
     }
     // DbgBreakPoint();
-    DbgPrint("Bye Kerenl Thread 2!\n");
     PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+VOID DpcRoutine(
+    IN PKDPC  pDpc,
+    IN PVOID  Context,
+    IN PVOID  Arg1,
+    IN PVOID  Arg2
+)
+{
+    UNREFERENCED_PARAMETER(pDpc);
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(Arg1);
+    UNREFERENCED_PARAMETER(Arg2);
+    ULONG  cpu_id = KeGetCurrentProcessorNumberEx(NULL);
+    DbgPrint("Hi CPU: %d\n", cpu_id);
+    for (int i = 0; i < 10000; i++)
+    {
+        continue;
+    }
+    //DbgPrint("Bye CPU: %d\n", cpu_id);
+    return;
 }
 
 extern "C" NTSTATUS
@@ -73,7 +114,7 @@ DriverEntry(
         return status;
 
     DbgPrint("Hi, Device!\n");
-   
+
 
     //Practice of creating WorkItem
     PIO_WORKITEM workItem = NULL;
@@ -90,7 +131,7 @@ DriverEntry(
     else {
         DbgPrint("Create DeviceObject Fail!\n");
     }
-
+#if 0
     // Practice of creating System Thread.
     KeInitializeEvent(&EventCloseThread, NotificationEvent, FALSE);
     HANDLE hThreadHandle = NULL;
@@ -99,6 +140,7 @@ DriverEntry(
         ObReferenceObjectByHandle(hThreadHandle, GENERIC_ALL, NULL, KernelMode, &pThreadHandle1, NULL);
         ZwClose(hThreadHandle);
     }
+#endif
 
     return status;
 }
@@ -152,20 +194,38 @@ void IoWorkitemRoutine(
     UNREFERENCED_PARAMETER(DeviceObject);
     UNREFERENCED_PARAMETER(Context);
 
-    DbgPrint("Hello WorkItem\n");
+    //DbgPrint("Hello WorkItem\n");
+
+    KeInitializeDpc(&DpcObj, DpcRoutine, NULL);
+    KeSetImportanceDpc(&DpcObj, HighImportance);
+
+    KeInitializeEvent(&EventCloseThread, NotificationEvent, FALSE);
+    KeInitializeEvent(&EventStartDpc, NotificationEvent, FALSE);
+
+    CpuId = 0;
 
     HANDLE hThreadHandle = NULL;
-    NTSTATUS status = PsCreateSystemThread(&hThreadHandle, GENERIC_ALL, NULL, NULL, NULL, ThreadFunc2, NULL);
+    NTSTATUS status;
+    status = PsCreateSystemThread(&hThreadHandle, GENERIC_ALL, NULL, NULL, NULL, ThreadFunc1, NULL);
+    if (status == STATUS_SUCCESS) {
+        ObReferenceObjectByHandle(hThreadHandle, GENERIC_ALL, NULL, KernelMode, &pThreadHandle1, NULL);
+        ZwClose(hThreadHandle);
+    }
+
+    
+    status = PsCreateSystemThread(&hThreadHandle, GENERIC_ALL, NULL, NULL, NULL, ThreadFunc2, NULL);
     if (status == STATUS_SUCCESS) {
         ObReferenceObjectByHandle(hThreadHandle, GENERIC_ALL, NULL, KernelMode, &pThreadHandle2, NULL);
         ZwClose(hThreadHandle);
     }
 
+    KeSetEvent(&EventStartDpc, IO_NO_INCREMENT, FALSE);
+
     if (Context != NULL) {
         IoUninitializeWorkItem((PIO_WORKITEM)Context);
         IoFreeWorkItem((PIO_WORKITEM)Context);
-        DbgPrint("Free WorkItem!\n");
+        //DbgPrint("Free WorkItem!\n");
     }
-    DbgPrint("WorkItem Routine Done\n");
+    //DbgPrint("WorkItem Routine Done\n");
     return;
 }
